@@ -51,8 +51,15 @@ class _HomePageState extends State<HomePage> {
 
   bool get _showTextInsteadOfPic => _showText; // false to show pic
   set _showTextInsteadOfPic(bool v) {
-    _showText = v;
-    setState(() {});
+    if (_showText != v) {
+      _showText = v;
+
+      text = _showText ? text : '';
+      _textSubmitable = text.isNotEmpty;
+      pic = _showText ? null : pic;
+
+      setState(() {});
+    }
   }
 
   void _onTextChanged(String value) {
@@ -75,6 +82,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onTextSubmit() {
+    if (text.isEmpty) {
+      if (kDebugMode) {
+        print('submit(pic): unexpected empty string!');
+      }
+      return;
+    }
+
     if (kDebugMode) {
       print('submit(text): ' + text);
     }
@@ -84,10 +98,11 @@ class _HomePageState extends State<HomePage> {
   void _onPicSubmit() {
     if (pic == null) {
       if (kDebugMode) {
-        print('submit(pic): unexpected null!');
+        print('submit(pic): unexpected null pic!');
       }
       return;
     }
+
     if (kDebugMode) {
       print('submit(pic): ' + pic!.name);
     }
