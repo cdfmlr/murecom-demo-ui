@@ -192,26 +192,54 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ],
                     )
-                  : Column(
-                      // emopic
-                      children: [
-                        // pic image preview
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12.0),
-                          child: kIsWeb
-                              ? Image.network(pic!.path)
-                              : Image.file(File(pic!.path)),
-                        ),
+                  : Container(
+                      constraints: BoxConstraints(
+                        maxWidth:
+                            MediaQuery.of(context).size.shortestSide / 1.2,
+                        maxHeight:
+                            MediaQuery.of(context).size.shortestSide / 1.2,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        // emopic
+                        children: [
+                          // pic image preview
 
-                        // submit button
-                        Container(
-                          margin: const EdgeInsets.only(top: 16),
-                          child: ElevatedButton(
-                            onPressed: () => _onPicSubmit(),
-                            child: const Text('提交'),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12.0),
+                            child: InteractiveViewer(
+                              child: kIsWeb
+                                  ? Image.network(pic!.path,
+                                      height: MediaQuery.of(context)
+                                              .size
+                                              .shortestSide /
+                                          1.5,
+                                      width: MediaQuery.of(context)
+                                              .size
+                                              .shortestSide /
+                                          1.5)
+                                  : Image.file(File(pic!.path),
+                                      height: MediaQuery.of(context)
+                                              .size
+                                              .shortestSide /
+                                          1.5,
+                                      width: MediaQuery.of(context)
+                                              .size
+                                              .shortestSide /
+                                          1.5),
+                            ),
                           ),
-                        ),
-                      ],
+
+                          // submit button
+                          Container(
+                            margin: const EdgeInsets.only(top: 16),
+                            child: ElevatedButton(
+                              onPressed: () => _onPicSubmit(),
+                              child: const Text('提交'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
               const SizedBox(height: 100),
