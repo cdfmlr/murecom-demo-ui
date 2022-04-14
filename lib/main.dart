@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:murecom/expandable_fab.dart';
+import 'package:murecom/recommend.dart';
 
 Future<void> main() async {
   runApp(const MyApp());
@@ -92,7 +93,15 @@ class _HomePageState extends State<HomePage> {
     if (kDebugMode) {
       print('submit(text): ' + text);
     }
-    // TODO: submit text
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RecommendPage(
+          text: text,
+        ),
+      ),
+    );
   }
 
   void _onPicSubmit() {
@@ -107,7 +116,17 @@ class _HomePageState extends State<HomePage> {
       print('submit(pic): ' + pic!.name);
     }
 
-    // TODO: submit pic
+    var imgBytes = pic!.readAsBytes();
+    imgBytes.then((value) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RecommendPage(
+            pic: value,
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _imagePick(ImageSource source) async {
