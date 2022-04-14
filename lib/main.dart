@@ -122,7 +122,7 @@ class _HomePageState extends State<HomePage> {
         context,
         MaterialPageRoute(
           builder: (context) => RecommendPage(
-            pic: value,
+            pic: SimpleFile(pic!.name, value),
           ),
         ),
       );

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 // enum RecommendSeedType {
 //   text,
@@ -14,6 +15,17 @@ const emotextServer = '192.168.43.214:8081';
 
 Uri emotextUri(String text) {
   return Uri.http(emotextServer, '/text', {'text': text});
+}
+
+Uri emopicUri() {
+  return Uri.http(emotextServer, '/pic');
+}
+
+class SimpleFile {
+  String filename;
+  Uint8List bytes;
+
+  SimpleFile(this.filename, this.bytes);
 }
 
 class Track {
@@ -67,7 +79,7 @@ class RecommendPage extends StatefulWidget {
 
   // final RecommendSeedType seedType;
   final String? text;
-  final List<int>? pic;
+  final SimpleFile? pic;
 
   @override
   State<RecommendPage> createState() => _RecommendPageState();
@@ -77,16 +89,26 @@ class _RecommendPageState extends State<RecommendPage> {
   late Future<RecommendResult> data;
 
   Future<RecommendResult> requestEmopicRecommend() async {
-    throw ('Not implemented'); // TODO: requestEmopicRecommend not implemented
-    var request = http.MultipartRequest('POST', Uri.parse('uri'));
-    request.files.add(http.MultipartFile.fromBytes('img', widget.pic!));
-    final response = await request.send();
+    var request = http.MultipartRequest('POST', emopicUri());
+    request.files.add(
+      http.MultipartFile.fromBytes('img', widget.pic!.bytes,
+          filename: widget.pic!.filename),
+    );
+    final streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
 
-    // .then((response) {
-    //   if (response.statusCode == 200) print("Uploaded!");
-    // });
-    // return response.stream.toString();
-    return RecommendResult([], [], []);
+    if (response.statusCode == 200) {
+      var json = jsonDecode(response.body);
+      var result = RecommendResult.fromJson(json);
+
+      if (kDebugMode) {
+        print(result);
+      }
+
+      return result;
+    } else {
+      throw Exception(response.body.toString());
+    }
   }
 
   Future<RecommendResult> requestEmotextRecommend() async {
@@ -133,7 +155,7 @@ class _RecommendPageState extends State<RecommendPage> {
           children: [
             widget.text != null ? Text(widget.text!) : const Text("no text"),
             widget.pic != null
-                ? Image.memory(Uint8List.fromList(widget.pic!))
+                ? Image.memory(widget.pic!.bytes)
                 : const Text("no img"),
             FutureBuilder(
               future: data,
