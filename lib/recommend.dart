@@ -88,15 +88,7 @@ class RecommendPage extends StatefulWidget {
 class _RecommendPageState extends State<RecommendPage> {
   late Future<RecommendResult> data;
 
-  Future<RecommendResult> requestEmopicRecommend() async {
-    var request = http.MultipartRequest('POST', emopicUri());
-    request.files.add(
-      http.MultipartFile.fromBytes('img', widget.pic!.bytes,
-          filename: widget.pic!.filename),
-    );
-    final streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
-
+  RecommendResult parseRecommendResponse(http.Response response) {
     if (response.statusCode == 200) {
       var json = jsonDecode(response.body);
       var result = RecommendResult.fromJson(json);
@@ -111,6 +103,18 @@ class _RecommendPageState extends State<RecommendPage> {
     }
   }
 
+  Future<RecommendResult> requestEmopicRecommend() async {
+    var request = http.MultipartRequest('POST', emopicUri());
+    request.files.add(
+      http.MultipartFile.fromBytes('img', widget.pic!.bytes,
+          filename: widget.pic!.filename),
+    );
+    final streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    return parseRecommendResponse(response);
+  }
+
   Future<RecommendResult> requestEmotextRecommend() async {
     final uri = emotextUri(widget.text ?? '');
     if (kDebugMode) {
@@ -118,18 +122,8 @@ class _RecommendPageState extends State<RecommendPage> {
     }
 
     final response = await http.get(uri);
-    if (response.statusCode == 200) {
-      var json = jsonDecode(response.body);
-      var result = RecommendResult.fromJson(json);
 
-      if (kDebugMode) {
-        print(result);
-      }
-
-      return result;
-    } else {
-      throw Exception(response.body.toString());
-    }
+    return parseRecommendResponse(response);
   }
 
   @override
