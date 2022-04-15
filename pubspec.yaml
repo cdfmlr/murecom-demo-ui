@@ -36,6 +36,13 @@ dependencies:
   cupertino_icons: ^1.0.2
   image_picker: ^0.8.5
   camera: ^0.9.4+19
+  # 画词云：暂时不用了
+  flutter_scatter: ^0.2.0
+  # 画饼图
+  fl_chart: ^0.50.1
+  custom_nested_scroll_view:
+    git:
+      url: https://github.com/idootop/custom_nested_scroll_view.git
 
 dev_dependencies:
   flutter_test:
