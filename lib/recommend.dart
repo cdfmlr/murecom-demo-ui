@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:collection';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
@@ -111,6 +112,7 @@ class RecommendResult {
     return 'RecommendResult(seedEmotion=$seedEmotion, distances=$distances, tracks=$tracks)';
   }
 
+  /// {'乐': 0.87}
   Map<String, double> getCrudeEmotionValues() {
     return crudeEmotionsRanges.map((key, indices) => MapEntry(
         key,
@@ -131,6 +133,28 @@ class RecommendResult {
           ),
         )
         .toList();
+  }
+
+  /// {'快乐(PA)': 0.66}, 排了序所有返回个 List<MapEntry>  Map.fromEntries(getTopFineEmotions()) 即可得到 Map 对象
+  List<MapEntry<String, double>> getTopFineEmotions() {
+    // zip -> filter(>0) -> sort
+    var lst = [
+      for (int i = 0; i < fineEmotions.length; i++)
+        MapEntry(fineEmotions[i], seedEmotion[i])
+    ].skipWhile((e) => e.value < 1e-2).toList()
+      ..sort((e1, e2) => -e1.value.compareTo(e2.value));
+
+    // top
+    if (lst.length > 3) {
+      lst = lst.sublist(0, 3);
+    }
+
+    if (kDebugMode) {
+      print('top emotions: $lst');
+    }
+
+    // to map
+    return lst;
   }
 }
 
@@ -221,47 +245,115 @@ class _RecommendPageState extends State<RecommendPage> {
             ),
           ];
         },
-        body: SafeArea(
-          top: false,
-          bottom: false,
-          child: Builder(
-            builder: (BuildContext context) {
-              return SingleChildScrollView(
-                child: Column(
-                  children: [
-                    FutureBuilder(
-                        future: data,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData) {
-                            return RecommendList(
-                              data: snapshot.data as RecommendResult,
-                            );
-                          } else if (snapshot.hasError) {
-                            return const Text('Error');
-                          } else {
-                            return Column(
-                              children: const [
-                                SizedBox(
-                                  child: CircularProgressIndicator(),
-                                  width: 60,
-                                  height: 60,
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.only(top: 16),
-                                  child: Text('等待请求完成'),
-                                )
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              FutureBuilder(
+                  future: data,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      var data = snapshot.data as RecommendResult;
+
+                      return Column(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.symmetric(
+                                vertical: 16, horizontal: 16),
+                            child: Column(
+                              children: [
+                                EmotionCard(data: data),
+                                const Divider(),
+                                RecommendList(data: data),
                               ],
-                            );
-                          }
-                        }),
-                    DataPreviewWidget(widget: widget, data: data),
-                  ],
-                ),
-              );
-            },
+                            ),
+                          ),
+                          // 相似推荐：更多类似...的作品
+                          // Material(
+                          //   color: Colors.grey[100],
+                          //   elevation: 8,
+                          //   child: Center(
+                          //     child: Text('jksdfkjkafhasd'),
+                          //   ),
+                          // )
+                        ],
+                      );
+                    } else if (snapshot.hasError) {
+                      return Text('Error: ${snapshot.error}');
+                    } else {
+                      // waiting
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: const [
+                            SizedBox(
+                              child: CircularProgressIndicator(),
+                              width: 50,
+                              height: 50,
+                            ),
+                            Padding(
+                              padding: EdgeInsets.only(top: 16),
+                              child: Text('正在为你推荐...'),
+                            )
+                          ],
+                        ),
+                      );
+                    }
+                  }),
+              // DataPreviewWidget(widget: widget, data: data),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class RecommendList extends StatelessWidget {
+  final RecommendResult data;
+
+  const RecommendList({
+    Key? key,
+    required this.data,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      shrinkWrap: true,
+      primary: false,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: data.tracks.length,
+      itemBuilder: (context, index) {
+        var track = data.tracks[index];
+        return ListTile(
+          // TODO: track cover
+          leading: Image.network(
+              "https://images.pexels.com/photos/396547/pexels-photo-396547.jpeg?auto=compress&cs=tinysrgb&h=350",
+              width: 50,
+              height: 50,
+              fit: BoxFit.contain),
+          title: Text(data.tracks[index].name),
+          subtitle: Text(track.artists.join(" & ")),
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => Dialog(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Text("暂不支持"),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -342,47 +434,153 @@ class RecommendAppBar extends StatelessWidget {
   }
 }
 
-class RecommendList extends StatefulWidget {
-  RecommendList({Key? key, required this.data}) : super(key: key);
+class EmotionCard extends StatefulWidget {
+  EmotionCard({Key? key, required this.data}) : super(key: key);
 
   final RecommendResult data;
 
   @override
-  State<RecommendList> createState() => _RecommendListState();
+  State<EmotionCard> createState() => _EmotionCardState();
 }
 
-class _RecommendListState extends State<RecommendList> {
+class _EmotionCardState extends State<EmotionCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      child: Column(
+      height: 158,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                height: 150,
-                width: 150,
-                child: PieChart(
-                  PieChartData(
-                    sections: widget.data.getEmotionPieDatas(),
-                    borderData: FlBorderData(
-                      show: false,
-                    ),
-                  ),
+          EmotionPieChart(data: widget.data),
+          const VerticalDivider(),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Emotion
+                Text(
+                  '你的心情:',
+                  style: Theme.of(context).textTheme.subtitle1,
                 ),
-              ),
-              const Divider(),
-            ],
-          ),
-          const Divider(),
-          SizedBox(
-            height: 300,
-            child: Container(
-              color: Colors.blue,
+                Text(
+                  widget.data
+                      .getTopFineEmotions()
+                      .map((e) => '${e.key}')
+                      // '${e.key}: ${(e.value * 100).roundToDouble() / 100}'
+                      .join("、"),
+                  style: TextStyle(
+                      fontSize: Theme.of(context).textTheme.subtitle2?.fontSize,
+                      color: Colors.grey[600]),
+                ),
+                const Spacer(),
+                // describe text
+                const DescriptText(
+                    text:
+                        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque scelerisque efficitur posuere. Curabitur tincidunt placerat diam ac efficitur. Cras rutrum egestas nisl vitae pulvinar. Donec id mollis diam, id hendrerit neque. Donec accumsan efficitur libero, vitae feugiat odio fringilla ac. Aliquam a turpis bibendum, varius erat dictum, feugiat libero. Nam et dignissim nibh. Morbi elementum varius elit, at dignissim ex accumsan a'),
+                const Spacer(),
+                // Buttons
+                Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    ElevatedButton(
+                      onPressed:
+                          null, // onPressed: null => button is disabled (both logically & for UI)
+                      child: Row(
+                        children: const [Icon(Icons.play_arrow), Text(" 播放")],
+                      ),
+                      style: ButtonStyle(
+                        backgroundColor:
+                            MaterialStateProperty.resolveWith<Color?>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.disabled)) {
+                              return Colors.grey[300];
+                            }
+                            return Colors.grey[100];
+                          },
+                        ),
+                        foregroundColor: MaterialStateProperty.all(
+                            Theme.of(context).primaryColor),
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.share),
+                      color: Theme.of(context).primaryColor,
+                    )
+                  ],
+                )
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class DescriptText extends StatelessWidget {
+  final String text;
+
+  const DescriptText({
+    Key? key,
+    required this.text,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 50),
+      child: TextButton(
+        child: Text(
+          text,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onPressed: () {
+          if (kDebugMode) {
+            print("expand describe text");
+          }
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: SingleChildScrollView(
+                    child: Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: Text(text),
+                )),
+              ),
+            ),
+            barrierDismissible: true,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class EmotionPieChart extends StatelessWidget {
+  const EmotionPieChart({
+    Key? key,
+    required this.data,
+  }) : super(key: key);
+
+  final RecommendResult data;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 150,
+      width: 150,
+      child: PieChart(
+        PieChartData(
+          sections: data.getEmotionPieDatas(),
+          borderData: FlBorderData(
+            show: false,
+          ),
+        ),
       ),
     );
   }
