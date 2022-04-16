@@ -118,6 +118,9 @@ class _HomePageState extends State<HomePage> {
 
     var imgBytes = pic!.readAsBytes();
     imgBytes.then((value) {
+      if (kDebugMode) {
+        print('pic length in bytes: ${value.lengthInBytes}');
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -130,7 +133,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _imagePick(ImageSource source) async {
-    final XFile? image = await _picker.pickImage(source: source);
+    final XFile? image = await _picker.pickImage(
+        source: source,
+        // Compression
+        maxHeight: 600,
+        maxWidth: 600,
+        imageQuality: 100);
 
     if (kDebugMode) {
       print(image?.name);
@@ -262,6 +270,7 @@ class _HomePageState extends State<HomePage> {
                     ),
 
               const SizedBox(height: 100),
+              Text('dev.version: fix-img-compression', style: Theme.of(context).textTheme.overline),
             ],
           ),
         ),
