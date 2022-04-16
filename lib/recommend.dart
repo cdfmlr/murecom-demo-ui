@@ -46,6 +46,14 @@ class Track {
   }
 }
 
+class PieSection {
+  String title;
+  double value;
+  Color? color;
+
+  PieSection({required this.title, required this.value, this.color});
+}
+
 class RecommendResult {
   /// '情感大类': [起, 始] 下标（闭区间）
   final crudeEmotionsRanges = {
@@ -121,15 +129,14 @@ class RecommendResult {
             .reduce((value, element) => value + element)));
   }
 
-  List<PieChartSectionData> getEmotionPieDatas() {
+  List<PieSection> getEmotionPieSections() {
     return getCrudeEmotionValues()
         .entries
         .map(
-          (e) => PieChartSectionData(
+          (e) => PieSection(
             title: e.key,
             value: e.value,
             color: crudeEmotionsColors[e.key],
-            titleStyle: const TextStyle(color: Colors.white),
           ),
         )
         .toList();
@@ -576,7 +583,15 @@ class EmotionPieChart extends StatelessWidget {
       width: 150,
       child: PieChart(
         PieChartData(
-          sections: data.getEmotionPieDatas(),
+          sections: data
+              .getEmotionPieSections()
+              .map((e) => PieChartSectionData(
+                    title: e.title,
+                    value: e.value,
+                    color: e.color,
+                    titleStyle: const TextStyle(color: Colors.white),
+                  ))
+              .toList(),
           borderData: FlBorderData(
             show: false,
           ),
