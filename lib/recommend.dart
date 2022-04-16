@@ -6,6 +6,7 @@ import 'dart:collection';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:high_chart/high_chart.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_scatter/flutter_scatter.dart';
@@ -52,6 +53,53 @@ class PieSection {
   Color? color;
 
   PieSection({required this.title, required this.value, this.color});
+}
+
+String highChartJsData(List<PieSection> sections) {
+  sections.sort((a, b) => a.value.compareTo(b.value));
+  var series = sections.map((e) {
+    var value = (e.value * 100).roundToDouble() / 100;
+    var dataLabels =
+        (value > 0.1) ? '{enabled: true, distance: -5}' : '{enabled: false}';
+
+    return '''{
+    name: '${e.title}', 
+    y: $value, 
+    z: $value, 
+    dataLabels: $dataLabels
+  }''';
+  }).join(", ");
+
+  return '''
+    {
+        chart: {
+            type: 'variablepie'
+        },
+        title: {
+            text: ''
+        },
+        tooltip: {
+            headerFormat: '',
+            pointFormat: '<span style="color:{point.color}">\u25CF</span> <b> {point.name}: {point.y}</b><br/>'
+        },
+        legend: {
+          enabled: false
+        },
+        exporting: {
+          enabled: false
+        },
+        credits: {
+          enabled: false
+        },
+        series: [{
+            minPointSize: 1,
+            innerSize: '10%',
+            zMin: 0,
+            name: 'countries',
+            data: [$series]
+        }]
+    }
+    ''';
 }
 
 class RecommendResult {
@@ -581,22 +629,42 @@ class EmotionPieChart extends StatelessWidget {
     return SizedBox(
       height: 150,
       width: 150,
-      child: PieChart(
-        PieChartData(
-          sections: data
-              .getEmotionPieSections()
-              .map((e) => PieChartSectionData(
-                    title: e.title,
-                    value: e.value,
-                    color: e.color,
-                    titleStyle: const TextStyle(color: Colors.white),
-                  ))
-              .toList(),
-          borderData: FlBorderData(
-            show: false,
-          ),
-        ),
-      ),
+      child: Builder(builder: (context) {
+        if (kIsWeb) {
+          return HighCharts(
+            loader: const SizedBox(
+              child: LinearProgressIndicator(),
+              width: 80,
+            ),
+            size: const Size(150, 150),
+            data: highChartJsData(data.getEmotionPieSections()),
+            scripts: const [
+              "https://code.highcharts.com/highcharts.js",
+              'https://code.highcharts.com/modules/networkgraph.js',
+              'https://code.highcharts.com/modules/exporting.js',
+            ],
+          );
+        } else {
+          return PieChart(
+            PieChartData(
+              sections: data
+                  .getEmotionPieSections()
+                  .map((e) => PieChartSectionData(
+                        title: e.title,
+                        value: e.value,
+                        color: e.color,
+                        titleStyle: const TextStyle(color: Colors.white),
+                      ))
+                  .toList(),
+              borderData: FlBorderData(
+                show: false,
+              ),
+            ),
+          );
+        }
+        // impossible
+        return Container(color: Colors.amber);
+      }),
     );
   }
 }
