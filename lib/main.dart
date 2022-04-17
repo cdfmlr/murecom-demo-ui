@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:murecom/expandable_fab.dart';
 import 'package:murecom/recommend.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 Future<void> main() async {
   runApp(const MyApp());
@@ -270,7 +271,17 @@ class _HomePageState extends State<HomePage> {
                     ),
 
               const SizedBox(height: 100),
-              Text('dev.version: fix-img-compression', style: Theme.of(context).textTheme.overline),
+              // Version
+              FutureBuilder(
+                  future: PackageInfo.fromPlatform(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      var packageInfo = snapshot.data as PackageInfo;
+                      return Text('version: ${packageInfo.version} (build ${packageInfo.buildNumber})',
+                          style: Theme.of(context).textTheme.overline);
+                    }
+                    return Container();
+                  }),
             ],
           ),
         ),
