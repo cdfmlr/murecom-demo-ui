@@ -115,6 +115,8 @@ class RecommendResult {
         .cast<Track>();
   }
 
+  List<MapEntry<String, double>>? _topFineEmotionsCache;
+
   @override
   String toString() {
     return 'RecommendResult(seedEmotion=$seedEmotion, distances=$distances, tracks=$tracks)';
@@ -144,6 +146,10 @@ class RecommendResult {
 
   /// {'快乐(PA)': 0.66}, 排了序所有返回个 List<MapEntry>  Map.fromEntries(getTopFineEmotions()) 即可得到 Map 对象
   List<MapEntry<String, double>> getTopFineEmotions() {
+    if (_topFineEmotionsCache != null) {
+      return _topFineEmotionsCache!;
+    }
+
     // zip -> filter(>0) -> sort
     var lst = [
       for (int i = 0; i < fineEmotions.length; i++)
@@ -160,7 +166,7 @@ class RecommendResult {
       print('top emotions: $lst');
     }
 
-    // to map
+    _topFineEmotionsCache = lst;
     return lst;
   }
 }
@@ -345,7 +351,10 @@ class _RecommendPageState extends State<RecommendPage> {
                   return EmotionalRecommendResultView(data: data);
                 }
                 if (snapshot.hasError) {
-                  return Text('Error: ${snapshot.error}');
+                  return RecommendErrorView(
+                    error: snapshot.error,
+                    isPic: (widget.pic != null),
+                  );
                 }
                 // waiting
                 return const ProgressIndicator(text: Text('正在为你推荐...'));
@@ -526,70 +535,111 @@ class EmotionView extends StatelessWidget {
           EmotionPieChart(data: data),
           const VerticalDivider(),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Emotion
-                Text(
-                  '你的心情:',
-                  style: Theme.of(context).textTheme.subtitle1,
-                ),
-                Text(
-                  data
-                      .getTopFineEmotions()
-                      .map((e) => e.key)
-                      // '${e.key}: ${(e.value * 100).roundToDouble() / 100}'
-                      .join("、"),
-                  style: TextStyle(
-                      fontSize: Theme.of(context).textTheme.subtitle2?.fontSize,
-                      color: Colors.grey[600]),
-                ),
-                const Spacer(),
-                // describe text
-                const PopupText(text: lipsum),
-                const Spacer(),
-                // Buttons
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    ElevatedButton(
-                      onPressed: null,
-                      // onPressed: null => button is disabled (both logically & for UI)
-                      child: Row(
-                        children: const [Icon(Icons.play_arrow), Text(" 播放")],
-                      ),
-                      style: ButtonStyle(
-                        backgroundColor:
-                            MaterialStateProperty.resolveWith<Color?>(
-                          (Set<MaterialState> states) {
-                            if (states.contains(MaterialState.disabled)) {
-                              return Colors.grey[300];
-                            }
-                            return Colors.grey[100];
-                          },
-                        ),
-                        foregroundColor: MaterialStateProperty.all(
-                            Theme.of(context).primaryColor),
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.share),
-                      color: Theme.of(context).primaryColor,
-                    )
-                  ],
-                )
-              ],
-            ),
+            child: buildEmotionDescription(context),
           ),
         ],
       ),
     );
   }
+
+  /// buildEmotionDescription 构建出 [EmotionPieChart] 旁边的文字信息。
+  /// 包含：
+  /// - 前三个细类心情，
+  /// - todo 的推荐语
+  /// - 以及画饼的播放按钮。
+  ///
+  /// 如果 getTopFineEmotions 得到空列表，即没有分析出心情，则显示"抱歉"，
+  /// 其他的按钮什么的全都不再显示。
+  Widget buildEmotionDescription(BuildContext context) {
+    var emotions = data.getTopFineEmotions();
+
+    var subtitle = '抱歉！';
+    var value = '我们未能分析出您的心';
+
+    if (emotions.isNotEmpty) {
+      subtitle = '抱歉!';
+      value = '未能分析出您的心情';
+
+      subtitle = '你的心情';
+      value = emotions
+          .map((e) => e.key)
+          // '${e.key}: ${(e.value * 100).roundToDouble() / 100}'
+          .join("、");
+    }
+
+    // 文本：您的心情 \n 快乐、悲伤、惊讶
+    List<Widget> texts = [
+      Text(
+        subtitle,
+        style: Theme.of(context).textTheme.subtitle1,
+      ),
+      Text(
+        value,
+        style: TextStyle(
+            fontSize: Theme.of(context).textTheme.subtitle2?.fontSize,
+            color: Colors.grey[600]),
+      ),
+    ];
+
+    // 长文本描述以及按钮
+    // 如果没有推荐结果，就全部没有了
+    List<Widget> descriptionAndButtons = [];
+    if (emotions.isNotEmpty) {
+      descriptionAndButtons = [
+        const Spacer(),
+        // describe text
+        const PopupText(text: lipsum),
+        const Spacer(),
+        // Buttons
+        buildButtons(context),
+      ];
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...texts,
+        ...descriptionAndButtons,
+      ],
+    );
+  }
+
+  Widget buildButtons(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.max,
+      children: [
+        ElevatedButton(
+          onPressed: null,
+          // onPressed: null => button is disabled (both logically & for UI)
+          child: Row(
+            children: const [Icon(Icons.play_arrow), Text(" 播放")],
+          ),
+          style: ButtonStyle(
+            backgroundColor: MaterialStateProperty.resolveWith<Color?>(
+              (Set<MaterialState> states) {
+                if (states.contains(MaterialState.disabled)) {
+                  return Colors.grey[300];
+                }
+                return Colors.grey[100];
+              },
+            ),
+            foregroundColor:
+                MaterialStateProperty.all(Theme.of(context).primaryColor),
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: () {},
+          icon: const Icon(Icons.share),
+          color: Theme.of(context).primaryColor,
+        )
+      ],
+    );
+  }
 }
 
-/// PopupText 默认展示有限部分，但可以点击弹出全部的文本
+/// PopupText 默认展示有限部分，但可以点击弹出全部的文本。
 /// Apple Music 的唱片介绍"更多"那种。
 class PopupText extends StatelessWidget {
   final String text;
@@ -698,6 +748,12 @@ class RecommendList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (data.getTopFineEmotions().isEmpty) {
+      return const Center(
+        child: Text("没有推荐的音乐。"),
+      );
+    }
+
     return ListView.builder(
       shrinkWrap: true,
       primary: false,
@@ -734,6 +790,59 @@ class RecommendList extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// RecommendErrorView 是出错、无法显示推荐结果的 [EmotionalRecommendResultView] 时，
+/// 作为替代的错误视图。
+class RecommendErrorView extends StatelessWidget {
+  final Object? error;
+  final bool? isPic;
+
+  bool isXMLHttpRequestError() {
+    return ('$error' == 'XMLHttpRequest error.');
+  }
+
+  static const _tips = {
+    'network': '请检查网络连接，或稍等片刻重试。',
+    'pic': '请确保图片包含人像，并保持网络连接通畅。',
+    'unknown': '请检查网络连接并稍后重试，若错误仍然出现请联系开发者。',
+  };
+
+  const RecommendErrorView({
+    Key? key,
+    this.error,
+    this.isPic,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    var tip = _tips['unknown'];
+    if (isXMLHttpRequestError()) {
+      tip = ((isPic ?? false) ? _tips['pic'] : _tips['network']);
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: 50,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            Text('出错啦', style: Theme.of(context).textTheme.subtitle1),
+            Text('$error', style: Theme.of(context).textTheme.caption),
+            Text(tip ?? 'Unexpected error!')
+          ],
+        ),
+      ),
     );
   }
 }
