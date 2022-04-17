@@ -31,6 +31,14 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// HomePage 完成 文本/图片 输入、提交，然后转到 [RecommendPage]。
+///
+/// 默认显示文本输入，类似于 Google 搜索首页。输入文本后提交，进行文本情感音乐推荐。
+///
+/// 通过右下角的 FAB 可以从拍照，或从相册选择图片。选择或拍照后，
+/// 文本框会被替换为图片预览，点击提交按钮，进行从图像的情感音乐推荐。
+///
+/// 显示图像预览的状态下也可以通过 FAB 的一个子按钮返回到文本输入界面。
 class HomePage extends StatefulWidget {
   const HomePage({Key? key, required this.title}) : super(key: key);
 
@@ -182,106 +190,14 @@ class _HomePageState extends State<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               // title
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'murecom',
-                  style: Theme.of(context).textTheme.headline2,
-                ),
-              ),
-
+              const Title(),
               // main: emotext or emopic
-              _showTextInsteadOfPic
-                  ? Row(
-                      // emotext
-                      children: <Widget>[
-                        // input text
-                        Flexible(
-                          child: TextField(
-                            minLines: 1,
-                            maxLines: 10,
-                            decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.text_fields),
-                                labelText: '你想说的话'),
-                            onChanged: (value) => _onTextChanged(value),
-                          ),
-                        ),
-                        // Submit text
-                        Visibility(
-                          child: Container(
-                            margin: const EdgeInsets.only(left: 16),
-                            child: ElevatedButton(
-                              onPressed: () => _onTextSubmit(),
-                              child: const Text('提交'),
-                            ),
-                          ),
-                          visible: _textSubmitable,
-                        ),
-                      ],
-                    )
-                  : Container(
-                      constraints: BoxConstraints(
-                        maxWidth:
-                            MediaQuery.of(context).size.shortestSide / 1.2,
-                        maxHeight:
-                            MediaQuery.of(context).size.shortestSide / 1.2,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        // emopic
-                        children: [
-                          // pic image preview
-
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12.0),
-                            child: InteractiveViewer(
-                              child: kIsWeb
-                                  ? Image.network(pic!.path,
-                                      height: MediaQuery.of(context)
-                                              .size
-                                              .shortestSide /
-                                          1.5,
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .shortestSide /
-                                          1.5)
-                                  : Image.file(File(pic!.path),
-                                      height: MediaQuery.of(context)
-                                              .size
-                                              .shortestSide /
-                                          1.5,
-                                      width: MediaQuery.of(context)
-                                              .size
-                                              .shortestSide /
-                                          1.5),
-                            ),
-                          ),
-
-                          // submit button
-                          Container(
-                            margin: const EdgeInsets.only(top: 16),
-                            child: ElevatedButton(
-                              onPressed: () => _onPicSubmit(),
-                              child: const Text('提交'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-              const SizedBox(height: 100),
-              // Version
-              FutureBuilder(
-                  future: PackageInfo.fromPlatform(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData) {
-                      var packageInfo = snapshot.data as PackageInfo;
-                      return Text('version: ${packageInfo.version} (build ${packageInfo.buildNumber})',
-                          style: Theme.of(context).textTheme.overline);
-                    }
-                    return Container();
-                  }),
+              _showTextInsteadOfPic ? buildEmotext() : buildEmopic(context),
+              // version
+              const Padding(
+                padding: EdgeInsets.only(top: 100.0),
+                child: VersionText(),
+              ),
             ],
           ),
         ),
@@ -309,5 +225,116 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  /// buildEmotext 构建输入/提交文本的 widget
+  Widget buildEmotext() {
+    return Row(
+      // emotext
+      children: <Widget>[
+        // input text
+        Flexible(
+          child: TextField(
+            minLines: 1,
+            maxLines: 10,
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.text_fields),
+                labelText: '你想说的话'),
+            onChanged: (value) => _onTextChanged(value),
+          ),
+        ),
+        // Submit text
+        Visibility(
+          child: Container(
+            margin: const EdgeInsets.only(left: 16),
+            child: ElevatedButton(
+              onPressed: () => _onTextSubmit(),
+              child: const Text('提交'),
+            ),
+          ),
+          visible: _textSubmitable,
+        ),
+      ],
+    );
+  }
+
+  /// buildEmopic 构建预览/提交图片的 widget
+  Widget buildEmopic(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.shortestSide / 1.2,
+        maxHeight: MediaQuery.of(context).size.shortestSide / 1.2,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        // emopic
+        children: [
+          // pic image preview
+
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12.0),
+            child: InteractiveViewer(
+              child: kIsWeb
+                  ? Image.network(pic!.path,
+                      height: MediaQuery.of(context).size.shortestSide / 1.5,
+                      width: MediaQuery.of(context).size.shortestSide / 1.5)
+                  : Image.file(File(pic!.path),
+                      height: MediaQuery.of(context).size.shortestSide / 1.5,
+                      width: MediaQuery.of(context).size.shortestSide / 1.5),
+            ),
+          ),
+
+          // submit button
+          Container(
+            margin: const EdgeInsets.only(top: 16),
+            child: ElevatedButton(
+              onPressed: () => _onPicSubmit(),
+              child: const Text('提交'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Title 显示一个 murecom 的大字标题，类似于 Google 搜索首页
+class Title extends StatelessWidget {
+  const Title({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Text(
+        'murecom',
+        style: Theme.of(context).textTheme.headline2,
+      ),
+    );
+  }
+}
+
+/// VersionText 显示版本
+class VersionText extends StatelessWidget {
+  const VersionText({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+        future: PackageInfo.fromPlatform(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            var packageInfo = snapshot.data as PackageInfo;
+            return Text(
+                'version: ${packageInfo.version} (build ${packageInfo.buildNumber})',
+                style: Theme.of(context).textTheme.overline);
+          }
+          return Container();
+        });
   }
 }
