@@ -115,6 +115,10 @@ class RecommendResult {
         .cast<Track>();
   }
 
+  RecommendResult.empty() {
+    seedEmotion = [for (int i = 0; i < fineEmotions.length; i++) 0];
+  }
+
   List<MapEntry<String, double>>? _topFineEmotionsCache;
 
   @override
@@ -228,6 +232,33 @@ String highChartJsData(List<PieSection> sections) {
     ''';
 }
 
+class BadRequestException implements Exception {
+  final String? message;
+
+  BadRequestException([this.message]);
+
+  bool isNotImage() => _messageContains('not a image');
+
+  bool isNoBody() => _messageContains('no human body');
+
+  bool isNoEmo() => _messageContains('no emotion');
+
+  bool isMissingQuery() => _messageContains('required query');
+
+  bool isMissingPostImg() => _messageContains('post data img');
+
+  bool isEmptySeed() => _messageContains('empty seed');
+
+  bool _messageContains(String s) {
+    return message?.toLowerCase().contains(s) ?? false;
+  }
+
+  @override
+  String toString() {
+    return 'Bad Request: $message';
+  }
+}
+
 /// RecommendPage 拿到 [HomePage] 传来的 seed [text] 或 [pic]，
 /// 请求 emotional_recommender.py 服务，获取心情音乐推荐。
 /// 输入的 seed 文本或图片会作为该页面的 AppBar 的背景（[RecommendAppBar]）。
@@ -270,7 +301,18 @@ class _RecommendPageState extends State<RecommendPage> {
 
       return result;
     } else {
-      throw Exception(response.body.toString());
+      if (kDebugMode) {
+        print(
+            'recommender server error response: [${response.statusCode}] ${response.reasonPhrase} \n\t ${response.body}');
+      }
+      if (response.statusCode == 400) {
+        var e = BadRequestException(response.body);
+        if (e.isNoEmo()) {
+          return RecommendResult.empty();
+        }
+        throw e;
+      }
+      throw Exception(response.body);
     }
   }
 
@@ -554,12 +596,9 @@ class EmotionView extends StatelessWidget {
     var emotions = data.getTopFineEmotions();
 
     var subtitle = '抱歉！';
-    var value = '我们未能分析出您的心';
+    var value = '未能分析出您的心情';
 
     if (emotions.isNotEmpty) {
-      subtitle = '抱歉!';
-      value = '未能分析出您的心情';
-
       subtitle = '你的心情';
       value = emotions
           .map((e) => e.key)
@@ -800,13 +839,9 @@ class RecommendErrorView extends StatelessWidget {
   final Object? error;
   final bool? isPic;
 
-  bool isXMLHttpRequestError() {
-    return ('$error' == 'XMLHttpRequest error.');
-  }
-
   static const _tips = {
     'network': '请检查网络连接，或稍等片刻重试。',
-    'pic': '请确保图片包含人像，并保持网络连接通畅。',
+    'nobody': '请确保图片包含人像，并保持网络连接通畅。',
     'unknown': '请检查网络连接并稍后重试，若错误仍然出现请联系开发者。',
   };
 
@@ -819,8 +854,11 @@ class RecommendErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var tip = _tips['unknown'];
-    if (isXMLHttpRequestError()) {
-      tip = ((isPic ?? false) ? _tips['pic'] : _tips['network']);
+    if (error.runtimeType == BadRequestException) {
+      var e = error as BadRequestException;
+      if (e.isNoBody()) {
+        tip = _tips['nobody'];
+      }
     }
 
     return Center(
