@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:image_picker/image_picker.dart';
 
-import 'package:murecom/expandable_fab.dart';
+import 'package:murecom/widgets/expandable_fab.dart';
 import 'package:murecom/recommend.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 

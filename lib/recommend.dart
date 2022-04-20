@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:high_chart/high_chart.dart';
 import 'package:http/http.dart' as http;
 
-import 'album_cover.dart';
+import 'widgets/popup_text.dart';
+import 'widgets/album_cover.dart';
+import 'widgets/progress_indicator.dart';
 
 /// 提供 emotext 服务的 emotional_recommender.py 服务器
 const emotextServer = '192.168.43.214:8081';
@@ -57,8 +59,18 @@ class Track {
   }
 }
 
-/// RecommendResult 是请求 emotional_recommender.py server 返回的响应。
-class RecommendResult {
+/// Emotion 是响应结果中的心情。
+class Emotion {
+  late List<double> values;
+
+  Emotion(this.values);
+
+  Emotion.empty() {
+    values = [for (int i = 0; i < fineEmotions.length; i++) 0];
+  }
+
+  // region consts
+
   /// '情感大类': [起, 始] 下标（闭区间）
   final crudeEmotionsRanges = {
     '乐': [0, 1],
@@ -104,37 +116,18 @@ class RecommendResult {
     '惊奇(PC)'
   ];
 
-  late List<double> seedEmotion;
-  late List<double> distances;
-  late List<Track> tracks;
-
-  RecommendResult(this.seedEmotion, this.distances, this.tracks);
-
-  RecommendResult.fromJson(Map<String, dynamic> m) {
-    seedEmotion = m['seed_emotion'].cast<double>();
-    distances = m['distances'][0].cast<double>();
-    tracks = m['recommended_tracks']
-        .map((e) => Track.fromJson(e))
-        .toList()
-        .cast<Track>();
-  }
-
-  RecommendResult.empty() {
-    seedEmotion = [for (int i = 0; i < fineEmotions.length; i++) 0];
-  }
-
-  List<MapEntry<String, double>>? _topFineEmotionsCache;
+  // endregion consts
 
   @override
   String toString() {
-    return 'RecommendResult(seedEmotion=$seedEmotion, distances=$distances, tracks=$tracks)';
+    return 'Emotion$values';
   }
 
   /// {'乐': 0.87}
   Map<String, double> getCrudeEmotionValues() {
     return crudeEmotionsRanges.map((key, indices) => MapEntry(
         key,
-        seedEmotion
+        values
             .sublist(indices[0], indices[1] + 1)
             .reduce((value, element) => value + element)));
   }
@@ -161,7 +154,7 @@ class RecommendResult {
     // zip -> filter(>0) -> sort
     var lst = [
       for (int i = 0; i < fineEmotions.length; i++)
-        MapEntry(fineEmotions[i], seedEmotion[i])
+        MapEntry(fineEmotions[i], values[i])
     ].skipWhile((e) => e.value < 1e-2).toList()
       ..sort((e1, e2) => -e1.value.compareTo(e2.value));
 
@@ -176,6 +169,42 @@ class RecommendResult {
 
     _topFineEmotionsCache = lst;
     return lst;
+  }
+
+  /// 用来存放 getTopFineEmotions 的结果缓存
+  List<MapEntry<String, double>>? _topFineEmotionsCache;
+}
+
+/// RecommendResult 是请求 emotional_recommender.py server 返回的响应。
+class RecommendResult {
+  late Emotion seedEmotion;
+  late List<double> distances;
+  late List<Track> tracks;
+
+  RecommendResult(this.seedEmotion, this.distances, this.tracks);
+
+  RecommendResult.fromJson(Map<String, dynamic> m) {
+    seedEmotion = Emotion(m['seed_emotion'].cast<double>());
+    distances = m['distances'][0].cast<double>();
+    // 如果心情为空，推荐的歌没有意义。
+    tracks = [];
+    if (seedEmotion.getTopFineEmotions().isNotEmpty) {
+      tracks = m['recommended_tracks']
+          .map((e) => Track.fromJson(e))
+          .toList()
+          .cast<Track>();
+    }
+  }
+
+  RecommendResult.empty() {
+    seedEmotion = Emotion.empty();
+    distances = [];
+    tracks = [];
+  }
+
+  @override
+  String toString() {
+    return 'RecommendResult(seedEmotion=$seedEmotion, distances=$distances, tracks=$tracks)';
   }
 }
 
@@ -403,7 +432,7 @@ class _RecommendPageState extends State<RecommendPage> {
                   );
                 }
                 // waiting
-                return const ProgressIndicator(text: Text('正在为你推荐...'));
+                return const TextProgressIndicator(text: Text('正在为你推荐...'));
               }),
         ),
       ),
@@ -493,38 +522,6 @@ class RecommendAppBar extends StatelessWidget {
   }
 }
 
-/// ProgressIndicator 就是个简单的等待的无限转圈进度条。
-/// [text] 是显示在圈下面的文本。
-class ProgressIndicator extends StatelessWidget {
-  final Widget text;
-
-  const ProgressIndicator({
-    Key? key,
-    required this.text,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // const text = Text('正在为你推荐...');
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          const SizedBox(
-            child: CircularProgressIndicator(),
-            width: 50,
-            height: 50,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: text,
-          )
-        ],
-      ),
-    );
-  }
-}
-
 /// EmotionalRecommendResultView 是心情音乐推荐的全部结果，
 /// 包含一个 [EmotionView] 和一个 [RecommendList]。
 class EmotionalRecommendResultView extends StatelessWidget {
@@ -543,9 +540,9 @@ class EmotionalRecommendResultView extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           child: Column(
             children: [
-              EmotionView(data: data),
+              EmotionView(emotion: data.seedEmotion),
               const Divider(),
-              RecommendList(data: data),
+              RecommendList(tracks: data.tracks),
             ],
           ),
         ),
@@ -564,9 +561,9 @@ class EmotionalRecommendResultView extends StatelessWidget {
 
 /// EmotionView 显示分析得到的心情结果
 class EmotionView extends StatelessWidget {
-  final RecommendResult data;
+  final Emotion emotion;
 
-  const EmotionView({Key? key, required this.data}) : super(key: key);
+  const EmotionView({Key? key, required this.emotion}) : super(key: key);
 
   static const lipsum =
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque scelerisque efficitur posuere. Curabitur tincidunt placerat diam ac efficitur. Cras rutrum egestas nisl vitae pulvinar. Donec id mollis diam, id hendrerit neque. Donec accumsan efficitur libero, vitae feugiat odio fringilla ac. Aliquam a turpis bibendum, varius erat dictum, feugiat libero. Nam et dignissim nibh. Morbi elementum varius elit, at dignissim ex accumsan a';
@@ -578,7 +575,7 @@ class EmotionView extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          EmotionPieChart(data: data),
+          EmotionPieChart(emotion: emotion),
           const VerticalDivider(),
           Expanded(
             child: buildEmotionDescription(context),
@@ -597,7 +594,7 @@ class EmotionView extends StatelessWidget {
   /// 如果 getTopFineEmotions 得到空列表，即没有分析出心情，则显示"抱歉"，
   /// 其他的按钮什么的全都不再显示。
   Widget buildEmotionDescription(BuildContext context) {
-    var emotions = data.getTopFineEmotions();
+    var emotions = emotion.getTopFineEmotions();
 
     var subtitle = '抱歉！';
     var value = '未能分析出您的心情';
@@ -682,58 +679,14 @@ class EmotionView extends StatelessWidget {
   }
 }
 
-/// PopupText 默认展示有限部分，但可以点击弹出全部的文本。
-/// Apple Music 的唱片介绍"更多"那种。
-class PopupText extends StatelessWidget {
-  final String text;
-
-  const PopupText({
-    Key? key,
-    required this.text,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 50),
-      child: TextButton(
-        child: Text(
-          text,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-        ),
-        onPressed: () {
-          if (kDebugMode) {
-            print("expand describe text");
-          }
-          showDialog(
-            context: context,
-            builder: (context) => Dialog(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: SingleChildScrollView(
-                    child: Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Text(text),
-                )),
-              ),
-            ),
-            barrierDismissible: true,
-          );
-        },
-      ),
-    );
-  }
-}
-
 /// EmotionPieChart 是生动展现心情大类的饼图
 class EmotionPieChart extends StatelessWidget {
+  final Emotion emotion;
+
   const EmotionPieChart({
     Key? key,
-    required this.data,
+    required this.emotion,
   }) : super(key: key);
-
-  final RecommendResult data;
 
   @override
   Widget build(BuildContext context) {
@@ -748,7 +701,7 @@ class EmotionPieChart extends StatelessWidget {
               width: 80,
             ),
             size: const Size(150, 150),
-            data: highChartJsData(data.getEmotionPieSections()),
+            data: highChartJsData(emotion.getEmotionPieSections()),
             scripts: const [
               "https://code.highcharts.com/highcharts.js",
               'https://code.highcharts.com/modules/networkgraph.js',
@@ -758,7 +711,7 @@ class EmotionPieChart extends StatelessWidget {
         } else {
           return PieChart(
             PieChartData(
-              sections: data
+              sections: emotion
                   .getEmotionPieSections()
                   .map((e) => PieChartSectionData(
                         title: e.title,
@@ -782,16 +735,16 @@ class EmotionPieChart extends StatelessWidget {
 
 /// RecommendList 是推荐的歌曲列表
 class RecommendList extends StatelessWidget {
-  final RecommendResult data;
+  final List<Track> tracks;
 
   const RecommendList({
     Key? key,
-    required this.data,
+    required this.tracks,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    if (data.getTopFineEmotions().isEmpty) {
+    if (tracks.isEmpty) {
       return const Center(
         child: Text("没有推荐的音乐。"),
       );
@@ -801,9 +754,9 @@ class RecommendList extends StatelessWidget {
       shrinkWrap: true,
       primary: false,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: data.tracks.length,
+      itemCount: tracks.length,
       itemBuilder: (context, index) {
-        var track = data.tracks[index];
+        var track = tracks[index];
         return ListTile(
           // TODO: track cover
           leading: AlbumCoverImage(
@@ -811,7 +764,7 @@ class RecommendList extends StatelessWidget {
             height: 50,
             width: 50,
           ),
-          title: Text(data.tracks[index].name),
+          title: Text(tracks[index].name),
           subtitle: Text(track.artists.join(" & ")),
           onTap: () {
             showDialog(
