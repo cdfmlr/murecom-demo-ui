@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:high_chart/high_chart.dart';
 import 'package:http/http.dart' as http;
 
+import 'album_cover.dart';
+
 /// 提供 emotext 服务的 emotional_recommender.py 服务器
 const emotextServer = '192.168.43.214:8081';
 
@@ -38,13 +40,15 @@ class Track {
   late String id;
   late String name;
   late List<String> artists;
+  late String albumCover;
 
-  Track(this.id, this.name, this.artists);
+  Track(this.id, this.name, this.artists, this.albumCover);
 
   Track.fromJson(Map<String, dynamic> m) {
     id = m['track_id'];
     name = m['track_name'];
     artists = m['artists'].cast<String>();
+    albumCover = m['album_cover'];
   }
 
   @override
@@ -802,11 +806,11 @@ class RecommendList extends StatelessWidget {
         var track = data.tracks[index];
         return ListTile(
           // TODO: track cover
-          leading: Image.network(
-              "https://images.pexels.com/photos/396547/pexels-photo-396547.jpeg?auto=compress&cs=tinysrgb&h=350",
-              width: 50,
-              height: 50,
-              fit: BoxFit.contain),
+          leading: AlbumCoverImage(
+            track.albumCover,
+            height: 50,
+            width: 50,
+          ),
           title: Text(data.tracks[index].name),
           subtitle: Text(track.artists.join(" & ")),
           onTap: () {
