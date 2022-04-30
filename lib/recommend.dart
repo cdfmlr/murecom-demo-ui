@@ -17,6 +17,9 @@ const emotextServer = '192.168.43.214:8081';
 /// 提供 emotext 服务的 emotional_recommender.py 服务器
 const emopicServer = '192.168.43.214:8081';
 
+/// 提供 TextGenerate 服务的 mta-lstm/infer.py 服务器
+const writerServer = '192.168.43.214:8083';
+
 /// emotextUri 构造 emotext 请求的 URL。传入 [text] 参数构造 GET 请求的 query.
 Uri emotextUri(String text) {
   return Uri.http(emotextServer, '/text', {'text': text});
@@ -26,6 +29,14 @@ Uri emotextUri(String text) {
 /// 因为要上传图片，所以这个用 POST 请求传数据，所以这里不构造 query 了。
 Uri emopicUri() {
   return Uri.http(emopicServer, '/pic');
+}
+
+/// writerUri 是获取推荐语 (recommendWords) 的服务的 URL。
+/// 传入请求的种子文本 [texts]，作为 query 写到 url 里。
+Uri writerUri(List<String> texts) {
+  return Uri.http(writerServer, '/gen', {'s': texts});
+  // var s = texts.map((s) => s.replaceAll(' ', '-')).map((s) => Uri.encodeFull(s)).join('+');
+  // return Uri.parse('http://$writerServer/gen?s=$s');
 }
 
 /// SimpleFile 是表示文件的类。包含文件名 [filename] 以及文件内容 [bytes]。
@@ -540,7 +551,7 @@ class EmotionalRecommendResultView extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           child: Column(
             children: [
-              EmotionView(emotion: data.seedEmotion),
+              EmotionView(emotion: data.seedEmotion, tracks: data.tracks),
               const Divider(),
               RecommendList(tracks: data.tracks),
             ],
@@ -562,8 +573,10 @@ class EmotionalRecommendResultView extends StatelessWidget {
 /// EmotionView 显示分析得到的心情结果
 class EmotionView extends StatelessWidget {
   final Emotion emotion;
+  final List<Track>? tracks; // for 推荐语
 
-  const EmotionView({Key? key, required this.emotion}) : super(key: key);
+  const EmotionView({Key? key, required this.emotion, this.tracks})
+      : super(key: key);
 
   static const lipsum =
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque scelerisque efficitur posuere. Curabitur tincidunt placerat diam ac efficitur. Cras rutrum egestas nisl vitae pulvinar. Donec id mollis diam, id hendrerit neque. Donec accumsan efficitur libero, vitae feugiat odio fringilla ac. Aliquam a turpis bibendum, varius erat dictum, feugiat libero. Nam et dignissim nibh. Morbi elementum varius elit, at dignissim ex accumsan a';
@@ -628,7 +641,7 @@ class EmotionView extends StatelessWidget {
       descriptionAndButtons = [
         const Spacer(),
         // describe text
-        const PopupText(text: lipsum),
+        RecommendWords(emotion: emotion, tracks: tracks),
         const Spacer(),
         // Buttons
         buildButtons(context),
@@ -675,6 +688,70 @@ class EmotionView extends StatelessWidget {
           color: Theme.of(context).primaryColor,
         )
       ],
+    );
+  }
+}
+
+/// RecommendWords 是心情音乐推荐的推荐语
+class RecommendWords extends StatelessWidget {
+  final Emotion? emotion;
+  final List<Track>? tracks;
+
+  const RecommendWords({Key? key, this.emotion, this.tracks}) : super(key: key);
+
+  Future<String> requestRecommendWords() async {
+    // 种子文本：前三心情 + 推荐歌名
+    List<String> texts = [];
+    if (emotion != null) {
+      texts.add(emotion!
+          .getTopFineEmotions()
+          .map((e) => e.key)
+          .map((s) => s
+              .replaceAll(RegExp(r'\(.*?\)'), '')
+              .replaceAll('疚', '内疚')
+              .replaceAll('贬责', '烦恼'))
+          .join("、"));
+    }
+    texts.addAll(tracks?.map((t) => t.name) ?? []);
+
+    final uri = writerUri(texts);
+    if (kDebugMode) {
+      print('request ${uri.toString()}');
+    }
+
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      var e = BadRequestException(response.body);
+      throw e;
+    }
+
+    return response.body;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: requestRecommendWords(),
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        if (snapshot.hasData) {
+          if (kDebugMode) {
+            print(snapshot.data);
+          }
+          return PopupText(text: (snapshot.data as String));
+        }
+        if (snapshot.hasError) {
+          if (kDebugMode) {
+            print(snapshot.error);
+          }
+          return const SizedBox(height: 50);
+        }
+        // loading
+        return const SizedBox(
+          height: 50,
+          child: Text('...'),
+        );
+      },
     );
   }
 }
