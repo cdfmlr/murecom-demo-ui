@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:high_chart/high_chart.dart';
 import 'package:http/http.dart' as http;
+import 'package:murecom/next_song.dart';
 
 import 'widgets/popup_text.dart';
 import 'widgets/album_cover.dart';
@@ -53,7 +54,7 @@ class Track {
   late String id;
   late String name;
   late List<String> artists;
-  late String albumCover;
+  late String? albumCover;
 
   Track(this.id, this.name, this.artists, this.albumCover);
 
@@ -837,29 +838,38 @@ class RecommendList extends StatelessWidget {
         return ListTile(
           // TODO: track cover
           leading: AlbumCoverImage(
-            track.albumCover,
+            track.albumCover ?? "",
             height: 50,
             width: 50,
           ),
           title: Text(tracks[index].name),
           subtitle: Text(track.artists.join(" & ")),
           onTap: () {
-            showDialog(
-              context: context,
-              builder: (context) => Dialog(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(
-                        child: Text("暂不支持"),
-                      ),
-                    ),
-                  ],
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NextSongPage(
+                  seedTrack: track,
                 ),
               ),
             );
+            // showDialog(
+            //   context: context,
+            //   builder: (context) => Dialog(
+            //     child: Column(
+            //       mainAxisSize: MainAxisSize.min,
+            //       children: [
+            //         Padding(
+            //           padding: const EdgeInsets.all(16.0),
+            //           child: Center(
+            //             child:
+            //                 Text('${track.name}\n${track.artists.join(' & ')}'),
+            //           ),
+            //         ),
+            //       ],
+            //     ),
+            //   ),
+            // );
           },
         );
       },
