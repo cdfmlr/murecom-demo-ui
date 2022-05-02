@@ -815,9 +815,20 @@ class EmotionPieChart extends StatelessWidget {
 class RecommendList extends StatelessWidget {
   final List<Track> tracks;
 
+  /// 若该 [RecommendList] 属于 [NextSongPage]，
+  /// 则应该设置 [fromNext] 为当前 [NextSongPage] 的层数。
+  ///
+  /// [RecommendPage] 的 [RecommendList] [fromNext] 应设置为 -1，
+  /// [RecommendPage] 第一次调用 [NextSongPage] 时 [fromNext] 为 0，
+  /// 再次点击列表中的歌，进行续曲推荐，则 [fromNext] 为 1，
+  /// 再一次为 2，然后 3，4，5，...
+  final int? fromNext;
+
+  /// 若该 RecommendList 属于 [NextSongPage]，则应该另 fromNext++
   const RecommendList({
     Key? key,
     required this.tracks,
+    this.fromNext = -1,
   }) : super(key: key);
 
   @override
@@ -850,6 +861,7 @@ class RecommendList extends StatelessWidget {
               MaterialPageRoute(
                 builder: (context) => NextSongPage(
                   seedTrack: track,
+                  fromNext: (fromNext ?? -1) + 1,
                 ),
               ),
             );

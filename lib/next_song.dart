@@ -10,17 +10,28 @@ import 'package:murecom/widgets/progress_indicator.dart';
 /// 提供 next-song 服务的 murecom-intro 服务器
 const nextSongServer = '192.168.43.214:8082';
 
+/// nextSongCount 是续曲推荐的曲目数
+const nextSongCount = 10;
+
 /// nextSongUri 构造 next-song 请求的 URL。传入 [seed] 参数构造 GET 请求的 query.
-Uri nextSongUri(Track seed) {
-  return Uri.http(
-      nextSongServer, '/next-song', {'track_name': seed.name, 'k': '10'});
+Uri nextSongUri(Track seed, {int? k = 10, int? shift = 0}) {
+  return Uri.http(nextSongServer, '/next-song', {
+    'track_name': seed.name,
+    'k': k?.toString() ?? '10',
+    'shift': shift?.toString() ?? '0',
+  });
 }
 
 /// NextSongPage 是显示续曲的页面。
 class NextSongPage extends StatefulWidget {
   final Track seedTrack;
 
-  const NextSongPage({Key? key, required this.seedTrack}) : super(key: key);
+  /// 这个页面是来自第几个 NextSongPage 的：
+  /// NextSongPage(0) -> NextSongPage(1) -> NextSongPage(2) -> ...
+  final int? fromNext;
+
+  const NextSongPage({Key? key, required this.seedTrack, this.fromNext = 0})
+      : super(key: key);
 
   @override
   State<NextSongPage> createState() => _NextSongPageState();
@@ -40,7 +51,7 @@ class _NextSongPageState extends State<NextSongPage> {
             builder: (context, snapshot) {
               if (snapshot.hasData) {
                 var tracks = snapshot.data as List<Track>;
-                return RecommendList(tracks: tracks);
+                return RecommendList(tracks: tracks, fromNext: widget.fromNext);
               }
               if (snapshot.hasError) {
                 return RecommendErrorView(error: snapshot.error);
@@ -63,7 +74,12 @@ class _NextSongPageState extends State<NextSongPage> {
   }
 
   Future<List<Track>> requestNextSong() async {
-    final uri = nextSongUri(widget.seedTrack);
+    var k = nextSongCount;
+    var shift = k * (widget.fromNext ?? 0);
+    if (shift > 1000) {
+      shift = 1000;
+    }
+    final uri = nextSongUri(widget.seedTrack, k: k, shift: shift);
     if (kDebugMode) {
       print('request ${uri.toString()}');
     }
