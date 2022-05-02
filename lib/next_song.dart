@@ -44,23 +44,29 @@ class _NextSongPageState extends State<NextSongPage> {
       appBar: AppBar(
         title: Text('更多类似「${widget.seedTrack.name}」的歌曲'),
       ),
-      body: Container(
-          margin: const EdgeInsets.all(16.0),
-          child: FutureBuilder(
-            future: requestNextSong(),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                var tracks = snapshot.data as List<Track>;
-                return RecommendList(tracks: tracks, fromNext: widget.fromNext);
-              }
-              if (snapshot.hasError) {
-                return RecommendErrorView(error: snapshot.error);
-              }
+      body: FutureBuilder(
+        future: requestNextSong(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            var tracks = snapshot.data as List<Track>;
+            return ListView(
+              children: [
+                Container(
+                  margin: const EdgeInsets.all(16.0),
+                  child:
+                      RecommendList(tracks: tracks, fromNext: widget.fromNext),
+                )
+              ],
+            );
+          }
+          if (snapshot.hasError) {
+            return Center(child: RecommendErrorView(error: snapshot.error));
+          }
 
-              // loading
-              return const TextProgressIndicator(text: Text("查询中..."));
-            },
-          )),
+          // loading
+          return const Center(child: TextProgressIndicator(text: Text("查询中...")));
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.insert_emoticon),
         onPressed: _onEmotionFabPressed,
