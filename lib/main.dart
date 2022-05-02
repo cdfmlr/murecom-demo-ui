@@ -9,11 +9,13 @@ import 'package:murecom/widgets/expandable_fab.dart';
 import 'package:murecom/recommend.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'model.dart';
+
 Future<void> main() async {
   runApp(const MyApp());
 }
 
-const String appTitle = 'murecom demo';
+const String appTitle = '基于心情的音乐推荐';
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
@@ -180,7 +182,10 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(
+          widget.title,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
       ),
 
       body: Container(

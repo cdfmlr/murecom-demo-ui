@@ -7,302 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:high_chart/high_chart.dart';
 import 'package:http/http.dart' as http;
 import 'package:murecom/next_song.dart';
+import 'package:murecom/requests.dart';
 
+import 'model.dart';
 import 'widgets/popup_text.dart';
 import 'widgets/album_cover.dart';
 import 'widgets/progress_indicator.dart';
-
-/// 提供 emotext 服务的 emotional_recommender.py 服务器
-const emotextServer = '192.168.43.214:8081';
-
-/// 提供 emotext 服务的 emotional_recommender.py 服务器
-const emopicServer = '192.168.43.214:8081';
-
-/// 提供 TextGenerate 服务的 mta-lstm/infer.py 服务器
-const writerServer = '192.168.43.214:8083';
-
-/// emotextUri 构造 emotext 请求的 URL。传入 [text] 参数构造 GET 请求的 query.
-Uri emotextUri(String text) {
-  return Uri.http(emotextServer, '/text', {'text': text});
-}
-
-/// emopicUri 获取 emopic 服务的 URL。
-/// 因为要上传图片，所以这个用 POST 请求传数据，所以这里不构造 query 了。
-Uri emopicUri() {
-  return Uri.http(emopicServer, '/pic');
-}
-
-/// writerUri 是获取推荐语 (recommendWords) 的服务的 URL。
-/// 传入请求的种子文本 [texts]，作为 query 写到 url 里。
-Uri writerUri(List<String> texts) {
-  return Uri.http(writerServer, '/gen', {'s': texts});
-  // var s = texts.map((s) => s.replaceAll(' ', '-')).map((s) => Uri.encodeFull(s)).join('+');
-  // return Uri.parse('http://$writerServer/gen?s=$s');
-}
-
-/// SimpleFile 是表示文件的类。包含文件名 [filename] 以及文件内容 [bytes]。
-/// 用来给 [HomePage] 往 [RecommendPage] 传递要提交的图片文件。
-class SimpleFile {
-  String filename;
-  Uint8List bytes;
-
-  SimpleFile(this.filename, this.bytes);
-}
-
-/// Track 是响应结果中的曲目。
-class Track {
-  late String id;
-  late String name;
-  late List<String> artists;
-  late String? albumCover;
-
-  Track(this.id, this.name, this.artists, this.albumCover);
-
-  Track.fromJson(Map<String, dynamic> m) {
-    id = m['track_id'];
-    name = m['track_name'];
-    artists = m['artists'].cast<String>();
-    albumCover = m['album_cover'];
-  }
-
-  @override
-  String toString() {
-    return 'Track($id: $name - $artists)';
-  }
-}
-
-/// Emotion 是响应结果中的心情。
-class Emotion {
-  late List<double> values;
-
-  Emotion(this.values);
-
-  Emotion.empty() {
-    values = [for (int i = 0; i < fineEmotions.length; i++) 0];
-  }
-
-  // region consts
-
-  /// '情感大类': [起, 始] 下标（闭区间）
-  final crudeEmotionsRanges = {
-    '乐': [0, 1],
-    '好': [2, 6],
-    '怒': [7, 7],
-    '哀': [8, 11],
-    '惧': [12, 14],
-    '恶': [15, 19],
-    '惊': [20, 20]
-  };
-
-  final crudeEmotionsColors = {
-    '乐': const Color(0xffFA9DFA),
-    '好': const Color(0xffC978F5),
-    '怒': const Color(0xffFA534D),
-    '哀': const Color(0xff78AFF5),
-    '惧': const Color(0xff6836F5),
-    '恶': const Color(0xffF5E169), // F5E169
-    '惊': const Color(0xff6CF55F)
-  };
-
-  final fineEmotions = [
-    '快乐(PA)',
-    '安心(PE)',
-    '尊敬(PD)',
-    '赞扬(PH)',
-    '相信(PG)',
-    '喜爱(PB)',
-    '祝愿(PK)',
-    '愤怒(NA)',
-    '悲伤(NB)',
-    '失望(NJ)',
-    '疚(NH)',
-    '思(PF)',
-    '慌(NI)',
-    '恐惧(NC)',
-    '羞(NG)',
-    '烦闷(NE)',
-    '憎恶(ND)',
-    '贬责(NN)',
-    '妒忌(NK)',
-    '怀疑(NL)',
-    '惊奇(PC)'
-  ];
-
-  // endregion consts
-
-  @override
-  String toString() {
-    return 'Emotion$values';
-  }
-
-  /// {'乐': 0.87}
-  Map<String, double> getCrudeEmotionValues() {
-    return crudeEmotionsRanges.map((key, indices) => MapEntry(
-        key,
-        values
-            .sublist(indices[0], indices[1] + 1)
-            .reduce((value, element) => value + element)));
-  }
-
-  List<PieSection> getEmotionPieSections() {
-    return getCrudeEmotionValues()
-        .entries
-        .map(
-          (e) => PieSection(
-            title: e.key,
-            value: e.value,
-            color: crudeEmotionsColors[e.key],
-          ),
-        )
-        .toList();
-  }
-
-  /// {'快乐(PA)': 0.66}, 排了序所有返回个 List<MapEntry>  Map.fromEntries(getTopFineEmotions()) 即可得到 Map 对象
-  List<MapEntry<String, double>> getTopFineEmotions() {
-    if (_topFineEmotionsCache != null) {
-      return _topFineEmotionsCache!;
-    }
-
-    // zip -> filter(>0) -> sort
-    var lst = [
-      for (int i = 0; i < fineEmotions.length; i++)
-        MapEntry(fineEmotions[i], values[i])
-    ].skipWhile((e) => e.value < 1e-2).toList()
-      ..sort((e1, e2) => -e1.value.compareTo(e2.value));
-
-    // top
-    if (lst.length > 3) {
-      lst = lst.sublist(0, 3);
-    }
-
-    if (kDebugMode) {
-      print('top emotions: $lst');
-    }
-
-    _topFineEmotionsCache = lst;
-    return lst;
-  }
-
-  /// 用来存放 getTopFineEmotions 的结果缓存
-  List<MapEntry<String, double>>? _topFineEmotionsCache;
-}
-
-/// RecommendResult 是请求 emotional_recommender.py server 返回的响应。
-class RecommendResult {
-  late Emotion seedEmotion;
-  late List<double> distances;
-  late List<Track> tracks;
-
-  RecommendResult(this.seedEmotion, this.distances, this.tracks);
-
-  RecommendResult.fromJson(Map<String, dynamic> m) {
-    seedEmotion = Emotion(m['seed_emotion'].cast<double>());
-    distances = m['distances'][0].cast<double>();
-    // 如果心情为空，推荐的歌没有意义。
-    tracks = [];
-    if (seedEmotion.getTopFineEmotions().isNotEmpty) {
-      tracks = m['recommended_tracks']
-          .map((e) => Track.fromJson(e))
-          .toList()
-          .cast<Track>();
-    }
-  }
-
-  RecommendResult.empty() {
-    seedEmotion = Emotion.empty();
-    distances = [];
-    tracks = [];
-  }
-
-  @override
-  String toString() {
-    return 'RecommendResult(seedEmotion=$seedEmotion, distances=$distances, tracks=$tracks)';
-  }
-}
-
-/// PieSection 用来表示饼图中的一个块。
-class PieSection {
-  String title;
-  double value;
-  Color? color;
-
-  PieSection({required this.title, required this.value, this.color});
-}
-
-/// 构造 HighCharts 的饼图数据
-String highChartJsData(List<PieSection> sections) {
-  sections.sort((a, b) => a.value.compareTo(b.value));
-  var series = sections.map((e) {
-    var value = (e.value * 100).roundToDouble() / 100;
-    var dataLabels =
-        (value > 0.1) ? '{enabled: true, distance: -5}' : '{enabled: false}';
-
-    return '''{
-    name: '${e.title}', 
-    y: $value, 
-    z: $value, 
-    dataLabels: $dataLabels
-  }''';
-  }).join(", ");
-
-  return '''
-    {
-        chart: {
-            type: 'variablepie'
-        },
-        title: {
-            text: ''
-        },
-        tooltip: {
-            headerFormat: '',
-            pointFormat: '<span style="color:{point.color}">\u25CF</span> <b> {point.name}: {point.y}</b><br/>'
-        },
-        legend: {
-          enabled: false
-        },
-        exporting: {
-          enabled: false
-        },
-        credits: {
-          enabled: false
-        },
-        series: [{
-            minPointSize: 1,
-            innerSize: '10%',
-            zMin: 0,
-            name: 'countries',
-            data: [$series]
-        }]
-    }
-    ''';
-}
-
-class BadRequestException implements Exception {
-  final String? message;
-
-  BadRequestException([this.message]);
-
-  bool isNotImage() => _messageContains('not a image');
-
-  bool isNoBody() => _messageContains('no human body');
-
-  bool isNoEmo() => _messageContains('no emotion');
-
-  bool isMissingQuery() => _messageContains('required query');
-
-  bool isMissingPostImg() => _messageContains('post data img');
-
-  bool isEmptySeed() => _messageContains('empty seed');
-
-  bool _messageContains(String s) {
-    return message?.toLowerCase().contains(s) ?? false;
-  }
-
-  @override
-  String toString() {
-    return 'Bad Request: $message';
-  }
-}
 
 /// RecommendPage 拿到 [HomePage] 传来的 seed [text] 或 [pic]，
 /// 请求 emotional_recommender.py 服务，获取心情音乐推荐。
@@ -311,7 +21,6 @@ class BadRequestException implements Exception {
 class RecommendPage extends StatefulWidget {
   const RecommendPage({
     Key? key,
-    // required this.seedType,
     this.text,
     this.pic,
   }) : super(key: key);
@@ -333,66 +42,14 @@ class _RecommendPageState extends State<RecommendPage> {
   /// 后面 View 要在 FutureBuilder 中从该变量获取值。
   late Future<RecommendResult> data;
 
-  /// parseRecommendResponse 解析 emotional_recommender.py 服务返回的
-  /// 响应，即获取 emotext/emopic 的推荐结果
-  RecommendResult parseRecommendResponse(http.Response response) {
-    if (response.statusCode == 200) {
-      var json = jsonDecode(response.body);
-      var result = RecommendResult.fromJson(json);
-
-      if (kDebugMode) {
-        print(result);
-      }
-
-      return result;
-    } else {
-      if (kDebugMode) {
-        print(
-            'recommender server error response: [${response.statusCode}] ${response.reasonPhrase} \n\t ${response.body}');
-      }
-      if (response.statusCode == 400) {
-        var e = BadRequestException(response.body);
-        if (e.isNoEmo()) {
-          return RecommendResult.empty();
-        }
-        throw e;
-      }
-      throw Exception(response.body);
-    }
-  }
-
   /// requestEmopicRecommend 请求 emopic 服务，获取从图像的心情音乐推荐结果。
-  ///
-  /// ```
-  ///   POST http://emopic.server/pic
-  ///      FILE: img={filename=pic.filename, file=pic.file}
-  /// ```
   Future<RecommendResult> requestEmopicRecommend() async {
-    var request = http.MultipartRequest('POST', emopicUri());
-    request.files.add(
-      http.MultipartFile.fromBytes('img', widget.pic!.bytes,
-          filename: widget.pic!.filename),
-    );
-    final streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
-
-    return parseRecommendResponse(response);
+    return queryEmopicRecommend(widget.pic!);
   }
 
   /// requestEmotextRecommend 请求 emotext 服务，获取从文本的心情音乐推荐结果。
-  ///
-  /// ```
-  ///   GET http://emotext.server/text?text={text}
-  /// ```
   Future<RecommendResult> requestEmotextRecommend() async {
-    final uri = emotextUri(widget.text ?? '');
-    if (kDebugMode) {
-      print('request ${uri.toString()}');
-    }
-
-    final response = await http.get(uri);
-
-    return parseRecommendResponse(response);
+    return queryEmotextRecommend(widget.text ?? '');
   }
 
   /// 在初始化时调用就 requestEmo*Recommend 请求推荐
@@ -700,6 +357,7 @@ class RecommendWords extends StatelessWidget {
 
   const RecommendWords({Key? key, this.emotion, this.tracks}) : super(key: key);
 
+  /// requestRecommendWords 请求 murecom-writer 服务，获取推荐语写作结果。
   Future<String> requestRecommendWords() async {
     // 种子文本：前三心情 + 推荐歌名
     List<String> texts = [];
@@ -715,19 +373,7 @@ class RecommendWords extends StatelessWidget {
     }
     texts.addAll(tracks?.map((t) => t.name) ?? []);
 
-    final uri = writerUri(texts);
-    if (kDebugMode) {
-      print('request ${uri.toString()}');
-    }
-
-    final response = await http.get(uri);
-
-    if (response.statusCode != 200) {
-      var e = BadRequestException(response.body);
-      throw e;
-    }
-
-    return response.body;
+    return queryRecommendWords(texts);
   }
 
   @override
@@ -946,6 +592,7 @@ class RecommendErrorView extends StatelessWidget {
 ///
 /// Notice: data here is Future<RecommendResult>,
 /// so put this widget out of a FutureBuilder.
+@Deprecated('debug')
 class DataPreviewWidget extends StatelessWidget {
   const DataPreviewWidget({
     Key? key,
